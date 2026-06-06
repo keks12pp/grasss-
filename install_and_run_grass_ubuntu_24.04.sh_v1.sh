@@ -23,7 +23,16 @@ USE_DOCKER=false
 DOCKER_IMAGE="grass-foundation/grass:latest"  # replace with official image if docs specify
 
 # If not using Docker, set this to a release tarball URL (tar.gz or zip) that contains the grass executable
-GRASS_BINARY_URL=""  # e.g. https://github.com/grass-foundation/grass/releases/download/vX.Y/grass-linux-amd64.tar.gz
+GRASS_BINARY_URL=""  # REQUIRED if USE_DOCKER=false. Provide a signed release tarball URL (tar.gz or zip).
+# Example (uncomment and set):
+# GRASS_BINARY_URL="https://github.com/grass-foundation/grass/releases/download/vX.Y/grass-linux-amd64.tar.gz"
+# Security: if the project publishes checksum files (SHA256SUMS) and signatures (.asc), download and verify them
+# before running this script. Example verification (manual steps):
+# curl -fsSL -o SHA256SUMS https://.../SHA256SUMS
+# curl -fsSL -o SHA256SUMS.asc https://.../SHA256SUMS.asc
+# gpg --verify SHA256SUMS.asc SHA256SUMS
+# sha256sum -c SHA256SUMS
+# Do NOT run this script with an unsigned/unverified binary unless you trust the source.
 GRASS_EXEC="/usr/local/bin/grass"  # where the executable will be installed
 
 # Ports (adjust according to the Grass docs)
@@ -84,22 +93,9 @@ Requires=docker.service
 Restart=always
 RestartSec=10s
 User=root
-ExecStart=/usr/bin/docker run --name ${SERVICE_NAME} \
-  --rm \
-  --restart unless-stopped \
-  -v ${GRASS_HOME}:/var/lib/grass \
-  -v $(dirname ${GRASS_CONFIG}):/etc/grass:ro \
-  -e TZ=UTC \
-EOF
-
-  # append port mappings
-  for p in "${GRASS_PORTS[@]}"; do
-    echo "  -p ${p}:${p} \" >> /etc/systemd/system/${SERVICE_NAME}.service
-  done
-
-  cat >> /etc/systemd/system/${SERVICE_NAME}.service <<EOF
-  ${DOCKER_IMAGE}
-
+# Build ExecStart with all required flags and port mappings in a single line.
+# The command substitution below expands at script runtime to add "-p X:X" for each port in GRASS_PORTS.
+ExecStart=/usr/bin/docker run --name ${SERVICE_NAME} --rm --restart unless-stopped -v ${GRASS_HOME}:/var/lib/grass -v $(dirname ${GRASS_CONFIG}):/etc/grass:ro -e TZ=UTC$(for p in "${GRASS_PORTS[@]}"; do printf " -p %s:%s" "$p" "$p"; done) ${DOCKER_IMAGE}
 ExecStop=/usr/bin/docker stop ${SERVICE_NAME}
 
 [Install]
